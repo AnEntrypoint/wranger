@@ -1,0 +1,78 @@
+- id: wrangler-init
+  subject: Initialize Wrangler Worker project
+  status: pending
+  description: Create wrangler.toml, package.json, src/index.ts for CF Worker
+  effort: small
+  category: infra
+  blocking: [cors-middleware, auth-middleware, router, ws-proxy]
+  blockedBy: []
+  acceptance:
+    - wrangler.toml present with correct name/main/compatibility_date
+    - package.json has wrangler devDep
+    - src/index.ts exports fetch handler
+
+- id: auth-middleware
+  subject: Implement bearer token auth gate
+  status: pending
+  description: All requests must carry Authorization header with matching token. Token stored in Worker secret (env var). 401 on missing/invalid. OPTIONS preflight bypasses auth.
+  effort: small
+  category: feature
+  blocking: [router]
+  blockedBy: [wrangler-init]
+  acceptance:
+    - Missing token returns 401
+    - Wrong token returns 401
+    - Correct token passes through
+    - OPTIONS bypasses auth check
+
+- id: cors-middleware
+  subject: Implement CORS header injection
+  status: pending
+  description: Every response gets CORS headers. Configurable allowed origins via env. OPTIONS preflight returns 204 with full CORS headers immediately.
+  effort: small
+  category: feature
+  blocking: [router]
+  blockedBy: [wrangler-init]
+  acceptance:
+    - OPTIONS returns 204 with Access-Control-Allow-* headers
+    - All proxied responses include CORS headers
+    - Origin configurable via ALLOWED_ORIGINS env var
+
+- id: router
+  subject: Implement traffic router / proxy
+  status: pending
+  description: Route table maps path prefixes to upstream Worker URLs or origins. HTTP and WebSocket traffic both handled. Route table defined via ROUTES env var (JSON). Unknown routes return 404.
+  effort: medium
+  category: feature
+  blocking: [ws-proxy]
+  blockedBy: [auth-middleware, cors-middleware]
+  acceptance:
+    - HTTP requests forwarded to correct upstream preserving method/headers/body
+    - WebSocket upgrade requests tunneled via fetch with Upgrade header
+    - Unknown path returns 404 JSON
+    - Route table hot-swappable via env var
+
+- id: ws-proxy
+  subject: Implement WebSocket proxying
+  status: pending
+  description: Detect Upgrade: websocket header. Use CF WebSocket pair trick to tunnel WS through Worker to upstream. Bidirectional message forwarding.
+  effort: medium
+  category: feature
+  blocking: []
+  blockedBy: [router]
+  acceptance:
+    - WS upgrade forwarded to upstream
+    - Messages flow both directions
+    - Close frames propagated
+
+- id: debug-endpoint
+  subject: Add /debug/routes observability endpoint
+  status: pending
+  description: GET /debug/routes returns current route table, auth status (token present yes/no), CF metadata. Auth-gated.
+  effort: small
+  category: infra
+  blocking: []
+  blockedBy: [router]
+  acceptance:
+    - Returns JSON with routes, worker name, CF colo
+    - Requires valid bearer token

@@ -1,0 +1,24 @@
+{
+  "name": "wranger",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker proxy — routes HTTP/WS traffic with CORS and bearer auth",
+  "main": "bin/wranger.js",
+  "bin": {
+    "wranger": "bin/wranger.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "wrangler.toml",
+    ".env.example"
+  ],
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "keywords": ["cloudflare", "worker", "proxy", "cors", "websocket"],
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

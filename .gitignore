@@ -1,0 +1,6 @@
+.gm-stop-verified
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+.env
