@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- `bin/wranger.js` reads `WRANGER_URL` and `WRANGER_TOKEN` env vars (falls back to CLI arg / `AUTH_TOKEN` for compatibility)
+- `bunx @lanmower/wranger` works with only env vars set, no CLI args required
+
+
 ## [1.0.3] - 2026-04-14
 
 ### Added

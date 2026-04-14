@@ -4,17 +4,18 @@ const https = require("https");
 const net = require("net");
 const { URL } = require("url");
 
-const [, , workerUrl, localPort = "8080"] = process.argv;
+const workerUrl = process.env.WRANGER_URL || process.argv[2];
+const localPort = process.argv[3] || "8080";
 
 if (!workerUrl) {
-  console.error("Usage: npx wranger <worker-url> [local-port]");
-  console.error("  AUTH_TOKEN env var required");
+  console.error("Usage: WRANGER_URL=<url> WRANGER_TOKEN=<token> wranger [local-port]");
+  console.error("  or: wranger <worker-url> [local-port]");
   process.exit(1);
 }
 
-const token = process.env.AUTH_TOKEN;
+const token = process.env.WRANGER_TOKEN || process.env.AUTH_TOKEN;
 if (!token) {
-  console.error("AUTH_TOKEN env var required");
+  console.error("WRANGER_TOKEN env var required");
   process.exit(1);
 }
 
