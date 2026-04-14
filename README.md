@@ -41,13 +41,30 @@ Same as route-prefix with `Upgrade: websocket` header.
 | `/<url>` | Yes | Forward proxy to full URL |
 | `/<prefix>/...` | Yes | Reverse proxy via ROUTES config |
 
-## Environment Variables
+## Local proxy (bunx)
+
+```
+WRANGER_URL=https://wranger.almagestfraternite.workers.dev \
+WRANGER_TOKEN=<token> \
+bunx @lanmower/wranger [local-port]
+```
+
+Starts an HTTP proxy on `127.0.0.1:8080` (or `local-port`) that forwards all requests to the worker with bearer auth injected.
+
+## Worker Environment Variables
 
 | Var | Required | Description |
 |-----|----------|-------------|
 | `AUTH_TOKEN` | Yes | Bearer token for all authenticated endpoints |
 | `ROUTES` | No | JSON array of `{prefix, target}` route objects |
 | `ALLOWED_ORIGINS` | No | Comma-separated allowed origins, or `*` (default) |
+
+## Local Proxy Environment Variables
+
+| Var | Description |
+|-----|-------------|
+| `WRANGER_URL` | Worker base URL (or pass as first CLI arg) |
+| `WRANGER_TOKEN` | Bearer token sent to the worker |
 
 ## Deploy
 
