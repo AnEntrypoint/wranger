@@ -1,4 +1,6 @@
 .gm-stop-verified
+.prd
+.codeinsight
 node_modules/
 dist/
 .wrangler/
