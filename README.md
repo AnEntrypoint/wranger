@@ -8,14 +8,21 @@ Cloudflare Worker proxy — routes HTTP/WS traffic with CORS and bearer auth.
 
 ## Proxy Modes
 
-### 1. URL-as-path forward proxy
+### 1. Generic CORS-removing proxy (open, no auth)
+
+Three equivalent URL shapes — all unauthenticated, CORS-permissive:
 
 ```
 GET /https://example.com/path?q=1
-Authorization: Bearer <token>
+GET /?url=https%3A%2F%2Fexample.com%2Fpath
+GET /?quest=https://example.com/path
 ```
 
-### 2. Route-prefix reverse proxy
+Upstream CORS headers are stripped and replaced. OPTIONS preflight reflects the
+caller's `Access-Control-Request-Headers`. Shape-compatible with
+allorigins / codetabs / corsproxy.io.
+
+### 2. Route-prefix reverse proxy (bearer auth)
 
 Configure `ROUTES` env var as JSON:
 
@@ -28,7 +35,7 @@ GET /api/endpoint
 Authorization: Bearer <token>
 ```
 
-### 3. WebSocket proxy
+### 3. WebSocket proxy (bearer auth)
 
 Same as route-prefix with `Upgrade: websocket` header.
 
@@ -37,8 +44,10 @@ Same as route-prefix with `Upgrade: websocket` header.
 | Path | Auth | Description |
 |------|------|-------------|
 | `/proxy.pac` | No | PAC file pointing to this worker |
+| `/<url>` | No | Generic CORS-removing forward proxy |
+| `/?url=<url>` | No | Same, query-param shape |
+| `/?quest=<url>` | No | Same, query-param shape (raw URL) |
 | `/debug/routes` | Yes | Inspect configured routes and worker info |
-| `/<url>` | Yes | Forward proxy to full URL |
 | `/<prefix>/...` | Yes | Reverse proxy via ROUTES config |
 
 ## Local proxy (bunx)

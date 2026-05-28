@@ -9,21 +9,67 @@ interface Route {
     target: string;
 }
 
-function corsHeaders(origin: string, allowed: string): Record<string, string> {
-    const allow = allowed === "*" || allowed.split(",").map(s => s.trim()).includes(origin) ? origin : allowed.split(",")[0].trim();
-    return {
-        "Access-Control-Allow-Origin": allow,
-        "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-        "Access-Control-Allow-Headers": "Authorization,Content-Type,X-Requested-With",
-        "Access-Control-Allow-Credentials": "true",
-        "Access-Control-Max-Age": "86400",
-    };
+const HOP_BY_HOP = new Set([
+    "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+    "te", "trailer", "transfer-encoding", "upgrade", "host",
+]);
+
+const CORS_STRIP = new Set([
+    "access-control-allow-origin",
+    "access-control-allow-credentials",
+    "access-control-allow-methods",
+    "access-control-allow-headers",
+    "access-control-expose-headers",
+    "access-control-max-age",
+    "vary",
+]);
+
+function allowOrigin(origin: string, allowed: string): string {
+    if (allowed === "*" || !allowed) return origin && origin !== "*" ? origin : "*";
+    const list = allowed.split(",").map(s => s.trim());
+    if (list.includes(origin)) return origin;
+    return list[0];
 }
 
-function addCors(res: Response, origin: string, allowed: string): Response {
+function corsHeaders(origin: string, allowed: string, acrh?: string | null): Record<string, string> {
+    const allow = allowOrigin(origin, allowed);
+    const h: Record<string, string> = {
+        "Access-Control-Allow-Origin": allow,
+        "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,HEAD,OPTIONS",
+        "Access-Control-Allow-Headers": acrh && acrh.length > 0 ? acrh : "Authorization,Content-Type,X-Requested-With",
+        "Access-Control-Expose-Headers": "*",
+        "Access-Control-Max-Age": "86400",
+        "Vary": "Origin, Access-Control-Request-Headers",
+    };
+    if (allow !== "*") h["Access-Control-Allow-Credentials"] = "true";
+    return h;
+}
+
+function applyCors(res: Response, origin: string, allowed: string): Response {
     const headers = new Headers(res.headers);
+    for (const k of CORS_STRIP) headers.delete(k);
     for (const [k, v] of Object.entries(corsHeaders(origin, allowed))) headers.set(k, v);
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+function forwardHeaders(src: Headers): Headers {
+    const out = new Headers();
+    for (const [k, v] of src) {
+        if (!HOP_BY_HOP.has(k.toLowerCase())) out.set(k, v);
+    }
+    out.delete("authorization");
+    return out;
+}
+
+async function forwardTo(request: Request, target: URL, origin: string, allowed: string): Promise<Response> {
+    const init: RequestInit = {
+        method: request.method,
+        headers: forwardHeaders(request.headers),
+        redirect: "follow",
+    };
+    if (!["GET", "HEAD"].includes(request.method)) init.body = request.body;
+    const upstream = await fetch(target.toString(), init);
+    return applyCors(upstream, origin, allowed);
 }
 
 function matchRoute(routes: Route[], url: URL): Route | undefined {
@@ -53,6 +99,23 @@ async function proxyWs(request: Request, target: string, url: URL, route: Route)
     return new Response(null, { status: 101, webSocket: client } as ResponseInit);
 }
 
+function extractTarget(url: URL): URL | null {
+    const fwd = url.pathname.match(/^\/(https?:\/\/.+)/);
+    if (fwd) {
+        const t = new URL(fwd[1]);
+        if (!t.search) {
+            const ws = url.search;
+            if (ws) t.search = ws;
+        }
+        return t;
+    }
+    const q = url.searchParams.get("url") ?? url.searchParams.get("quest");
+    if (q) {
+        try { return new URL(q); } catch { return null; }
+    }
+    return null;
+}
+
 export default {
     async fetch(request: Request, env: Env): Promise<Response> {
         const url = new URL(request.url);
@@ -60,7 +123,8 @@ export default {
         const allowed = env.ALLOWED_ORIGINS ?? "*";
 
         if (request.method === "OPTIONS") {
-            return new Response(null, { status: 204, headers: corsHeaders(origin, allowed) });
+            const acrh = request.headers.get("Access-Control-Request-Headers");
+            return new Response(null, { status: 204, headers: corsHeaders(origin, allowed, acrh) });
         }
 
         if (url.pathname === "/proxy.pac") {
@@ -70,9 +134,14 @@ export default {
             });
         }
 
+        const target = extractTarget(url);
+        if (target) {
+            return forwardTo(request, target, origin, allowed);
+        }
+
         const auth = request.headers.get("Authorization");
         if (!auth || auth !== `Bearer ${env.AUTH_TOKEN}`) {
-            return addCors(new Response(JSON.stringify({ error: "unauthorized" }), {
+            return applyCors(new Response(JSON.stringify({ error: "unauthorized" }), {
                 status: 401, headers: { "Content-Type": "application/json" }
             }), origin, allowed);
         }
@@ -85,22 +154,14 @@ export default {
                 colo: (request as unknown as { cf?: { colo?: string } }).cf?.colo ?? "unknown",
                 worker: "wranger",
             });
-            return addCors(new Response(body, { headers: { "Content-Type": "application/json" } }), origin, allowed);
-        }
-
-        const fwd = url.pathname.match(/^\/(https?:\/\/.+)/);
-        if (fwd) {
-            const target = new URL(fwd[1]);
-            if (!target.search) target.search = url.search;
-            const res = await fetch(new Request(target.toString(), request));
-            return addCors(res, origin, allowed);
+            return applyCors(new Response(body, { headers: { "Content-Type": "application/json" } }), origin, allowed);
         }
 
         const routes: Route[] = JSON.parse(env.ROUTES ?? "[]");
         const route = matchRoute(routes, url);
 
         if (!route) {
-            return addCors(new Response(JSON.stringify({ error: "no route" }), {
+            return applyCors(new Response(JSON.stringify({ error: "no route" }), {
                 status: 404, headers: { "Content-Type": "application/json" }
             }), origin, allowed);
         }
@@ -110,6 +171,6 @@ export default {
             ? await proxyWs(request, route.target, url, route)
             : await proxyHttp(request, route.target, url, route);
 
-        return isWs ? res : addCors(res, origin, allowed);
+        return isWs ? res : applyCors(res, origin, allowed);
     }
 };
