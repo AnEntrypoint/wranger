@@ -68,8 +68,13 @@ async function forwardTo(request: Request, target: URL, origin: string, allowed:
         redirect: "follow",
     };
     if (!["GET", "HEAD"].includes(request.method)) init.body = request.body;
-    const upstream = await fetch(target.toString(), init);
-    return applyCors(upstream, origin, allowed);
+    try {
+        const upstream = await fetch(target.toString(), init);
+        return applyCors(upstream, origin, allowed);
+    } catch (e) {
+        const body = JSON.stringify({ error: "upstream_fetch_failed", target: target.toString(), message: (e as Error)?.message ?? String(e) });
+        return applyCors(new Response(body, { status: 502, headers: { "Content-Type": "application/json" } }), origin, allowed);
+    }
 }
 
 function matchRoute(routes: Route[], url: URL): Route | undefined {
